@@ -5,17 +5,24 @@ export const openFolder = async (): Promise<string | null> => {
   return await window.electronAPI.openFolder();
 };
 
-export const loadFileStructure = async (path: string): Promise<FileEntry[]> => {
+export const loadFileStructure = async (path: string, recursive: boolean = true): Promise<FileEntry[]> => {
   const entries = await window.electronAPI.readDir(path);
   const result: FileEntry[] = [];
 
   for (const entry of entries) {
     const fullPath = `${path}\\${entry.name}`; // Windows path separator
+    let children: FileEntry[] | undefined = undefined;
+    
+    if (entry.isDirectory) {
+      // Recursively load children for directories
+      children = recursive ? await loadFileStructure(fullPath, true) : [];
+    }
+    
     result.push({
       name: entry.name,
       path: fullPath,
       isDirectory: entry.isDirectory,
-      children: entry.isDirectory ? [] : undefined,
+      children,
     });
   }
   

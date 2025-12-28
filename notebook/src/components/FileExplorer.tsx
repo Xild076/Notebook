@@ -1,9 +1,21 @@
-import React, { useState, DragEvent } from 'react';
-import { ChevronRight, ChevronDown, File, FilePlus, FolderPlus, ImagePlus, Folder } from 'lucide-react';
+import React, { useState, DragEvent, useRef, useEffect } from 'react';
+import { ChevronRight, ChevronDown, File, FilePlus, FolderPlus, ImagePlus, Folder, Pencil, GitBranch, Code, Kanban, Table, FileText, Plus, ChevronUp } from 'lucide-react';
 import { FileEntry, useAppStore } from '../store/store';
 import { createFile, createFolder, loadFileStructure } from '../lib/fileSystem';
 import { InputModal } from './ui/InputModal';
 import clsx from 'clsx';
+
+// File type definitions for quick create
+const FILE_TYPES = [
+  { extension: '.md', label: 'Markdown', icon: FileText, defaultContent: '# New Note\n\n' },
+  { extension: '.excalidraw', label: 'Excalidraw', icon: Pencil, defaultContent: '{"elements":[],"appState":{}}' },
+  { extension: '.mermaid', label: 'Mermaid Diagram', icon: GitBranch, defaultContent: 'graph TD\n    A[Start] --> B[End]' },
+  { extension: '.kanban', label: 'Kanban Board', icon: Kanban, defaultContent: '{"columns":[],"tasks":{}}' },
+  { extension: '.sheet', label: 'Spreadsheet', icon: Table, defaultContent: '[]' },
+  { extension: '.js', label: 'JavaScript', icon: Code, defaultContent: '// JavaScript file\n' },
+  { extension: '.ts', label: 'TypeScript', icon: Code, defaultContent: '// TypeScript file\n' },
+  { extension: '.json', label: 'JSON', icon: Code, defaultContent: '{\n  \n}' },
+];
 
 interface FileNodeProps {
   entry: FileEntry;
@@ -93,6 +105,20 @@ export const FileExplorer: React.FC = () => {
   const { fileStructure, currentPath, setFileStructure } = useAppStore();
   const [isNewFileModalOpen, setIsNewFileModalOpen] = useState(false);
   const [isNewFolderModalOpen, setIsNewFolderModalOpen] = useState(false);
+  const [isQuickCreateOpen, setIsQuickCreateOpen] = useState(false);
+  const [quickCreateType, setQuickCreateType] = useState<typeof FILE_TYPES[0] | null>(null);
+  const quickCreateRef = useRef<HTMLDivElement>(null);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (quickCreateRef.current && !quickCreateRef.current.contains(e.target as Node)) {
+        setIsQuickCreateOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const refreshFileStructure = async () => {
     if (currentPath) {
@@ -123,14 +149,31 @@ export const FileExplorer: React.FC = () => {
   const handleCreateFile = async (name: string) => {
     if (!currentPath || !name) return;
     try {
-      const fullPath = `${currentPath}\\${name}`;
-      await createFile(fullPath);
+      // If a quick create type is selected, append its extension and use default content
+      let fullPath = `${currentPath}\\${name}`;
+      let content = '';
+      
+      if (quickCreateType) {
+        if (!name.endsWith(quickCreateType.extension)) {
+          fullPath = `${currentPath}\\${name}${quickCreateType.extension}`;
+        }
+        content = quickCreateType.defaultContent;
+        setQuickCreateType(null);
+      }
+      
+      await createFile(fullPath, content);
       const files = await loadFileStructure(currentPath);
       setFileStructure(files);
     } catch (e) {
       console.error("Failed to create file", e);
       alert("Failed to create file");
     }
+  };
+
+  const handleQuickCreate = (fileType: typeof FILE_TYPES[0]) => {
+    setQuickCreateType(fileType);
+    setIsQuickCreateOpen(false);
+    setIsNewFileModalOpen(true);
   };
 
   const handleCreateFolder = async (name: string) => {
@@ -200,10 +243,41 @@ export const FileExplorer: React.FC = () => {
       <div className="p-2 border-b border-gray-200 dark:border-gray-800 flex justify-between items-center">
         <span className="font-semibold text-sm uppercase text-gray-500">Explorer</span>
         <div className="flex space-x-1">
+          {/* Quick Create Dropdown */}
+          <div className="relative" ref={quickCreateRef}>
+            <button 
+              className={clsx(
+                "p-1 hover:bg-gray-200 dark:hover:bg-gray-800 rounded flex items-center gap-0.5",
+                isQuickCreateOpen && "bg-gray-200 dark:bg-gray-800"
+              )}
+              title="Quick Create"
+              onClick={() => setIsQuickCreateOpen(!isQuickCreateOpen)}
+            >
+              <Plus size={16} />
+              {isQuickCreateOpen ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+            </button>
+            {isQuickCreateOpen && (
+              <div className="absolute right-0 top-full mt-1 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg z-50 min-w-[160px] py-1">
+                {FILE_TYPES.map((fileType) => {
+                  const Icon = fileType.icon;
+                  return (
+                    <button
+                      key={fileType.extension}
+                      className="w-full px-3 py-1.5 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-800 flex items-center gap-2"
+                      onClick={() => handleQuickCreate(fileType)}
+                    >
+                      <Icon size={14} className="text-gray-500" />
+                      <span>{fileType.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
           <button 
             className="p-1 hover:bg-gray-200 dark:hover:bg-gray-800 rounded" 
             title="New File"
-            onClick={() => setIsNewFileModalOpen(true)}
+            onClick={() => { setQuickCreateType(null); setIsNewFileModalOpen(true); }}
           >
             <FilePlus size={16} />
           </button>
@@ -245,11 +319,11 @@ export const FileExplorer: React.FC = () => {
 
       <InputModal
         isOpen={isNewFileModalOpen}
-        onClose={() => setIsNewFileModalOpen(false)}
+        onClose={() => { setIsNewFileModalOpen(false); setQuickCreateType(null); }}
         onSubmit={handleCreateFile}
-        title="Create New File"
+        title={quickCreateType ? `Create New ${quickCreateType.label}` : "Create New File"}
         label="File Name"
-        placeholder="e.g., note.md"
+        placeholder={quickCreateType ? `e.g., myfile${quickCreateType.extension}` : "e.g., note.md"}
       />
 
       <InputModal

@@ -1,4 +1,4 @@
-import React, { useState, Suspense, useRef } from 'react';
+import React, { useState, Suspense, useRef, useCallback, useEffect } from 'react';
 import { Excalidraw, exportToBlob } from "@excalidraw/excalidraw";
 import "@excalidraw/excalidraw/index.css";
 import { Taskbone } from '../../lib/taskbone';
@@ -12,6 +12,8 @@ interface ExcalidrawEmbedProps {
 export const ExcalidrawEmbed: React.FC<ExcalidrawEmbedProps> = ({ dataString, onChange }) => {
   const [excalidrawAPI, setExcalidrawAPI] = useState<any>(null);
   const [isScanning, setIsScanning] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const isFocusedRef = useRef(false);
 
   const [initialData] = useState<any>(() => {
     if (dataString && dataString.trim() !== '') {
@@ -26,27 +28,70 @@ export const ExcalidrawEmbed: React.FC<ExcalidrawEmbedProps> = ({ dataString, on
     return null;
   });
 
-  const timeoutRef = useRef<any>(null);
+  // Save the current state to parent
+  const saveState = useCallback(() => {
+    if (!excalidrawAPI) return;
+    
+    const elements = excalidrawAPI.getSceneElements();
+    const appState = excalidrawAPI.getAppState();
+    
+    const data = {
+      elements,
+      appState: {
+        viewBackgroundColor: appState.viewBackgroundColor,
+        currentItemFontFamily: appState.currentItemFontFamily,
+      }
+    };
+    onChange(JSON.stringify(data));
+  }, [excalidrawAPI, onChange]);
 
-  const handleChange = (elements: any, appState: any) => {
-    // Debounce the update to prevent freezing
-    if (timeoutRef.current) {
-      clearTimeout(timeoutRef.current);
-    }
+  // Track focus state and save on blur using native events
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
 
-    timeoutRef.current = setTimeout(() => {
-      // We only want to save relevant data
-      const data = {
-        elements,
-        appState: {
-          viewBackgroundColor: appState.viewBackgroundColor,
-          currentItemFontFamily: appState.currentItemFontFamily,
-          // Add other needed appState props
-        }
-      };
-      onChange(JSON.stringify(data));
-    }, 500);
-  };
+    const handleFocusIn = () => {
+      isFocusedRef.current = true;
+    };
+
+    const handleFocusOut = (e: FocusEvent) => {
+      // Check if focus is moving outside the container
+      const relatedTarget = e.relatedTarget as Node | null;
+      if (!container.contains(relatedTarget)) {
+        isFocusedRef.current = false;
+        saveState();
+      }
+    };
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault();
+        e.stopPropagation();
+        saveState();
+        setTimeout(() => {
+          window.dispatchEvent(new Event('app-save'));
+        }, 100);
+      }
+    };
+
+    // Prevent HTML5 drag events from interfering with Excalidraw's canvas drawing
+    const preventDrag = (e: DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+    };
+
+    container.addEventListener('focusin', handleFocusIn);
+    container.addEventListener('focusout', handleFocusOut);
+    container.addEventListener('keydown', handleKeyDown);
+    container.addEventListener('dragstart', preventDrag, true);
+
+    return () => {
+      container.removeEventListener('focusin', handleFocusIn);
+      container.removeEventListener('focusout', handleFocusOut);
+      container.removeEventListener('keydown', handleKeyDown);
+      container.removeEventListener('dragstart', preventDrag, true);
+    };
+  }, [saveState]);
 
   const handleOCR = async () => {
     if (!excalidrawAPI) return;
@@ -87,7 +132,12 @@ export const ExcalidrawEmbed: React.FC<ExcalidrawEmbedProps> = ({ dataString, on
   };
 
   return (
-    <div className="w-full h-full border rounded overflow-hidden relative isolate">
+    <div 
+      ref={containerRef}
+      className="w-full h-full border rounded overflow-hidden relative isolate"
+      draggable={false}
+      onDragStart={(e) => { e.preventDefault(); e.stopPropagation(); }}
+    >
       <button
         className="absolute top-2 left-2 z-10 p-2 bg-white dark:bg-gray-800 rounded shadow hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-gray-700 dark:text-gray-200"
         onClick={handleOCR}
@@ -99,7 +149,6 @@ export const ExcalidrawEmbed: React.FC<ExcalidrawEmbedProps> = ({ dataString, on
       <Suspense fallback={<div className="flex items-center justify-center h-full">Loading Excalidraw...</div>}>
         <Excalidraw
           initialData={initialData}
-          onChange={handleChange}
           excalidrawAPI={(api) => setExcalidrawAPI(api)}
         />
       </Suspense>

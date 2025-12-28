@@ -1,5 +1,7 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import mermaid from 'mermaid';
+import { Code, Eye, Columns } from 'lucide-react';
+import clsx from 'clsx';
 
 interface MermaidEmbedProps {
   definition: string;
@@ -12,17 +14,27 @@ mermaid.initialize({
   securityLevel: 'loose',
 });
 
-export const MermaidEmbed: React.FC<MermaidEmbedProps> = ({ definition }) => {
+type ViewMode = 'split' | 'code' | 'preview';
+
+export const MermaidEmbed: React.FC<MermaidEmbedProps> = ({ definition, onChange }) => {
   const containerRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [svg, setSvg] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
+  const [code, setCode] = useState(definition || '');
+  const [viewMode, setViewMode] = useState<ViewMode>('split');
+  const isFocusedRef = useRef(false);
 
+  // Render diagram when code changes
   useEffect(() => {
     const renderDiagram = async () => {
-      if (!definition) return;
+      if (!code) {
+        setSvg('');
+        return;
+      }
       try {
         const id = `mermaid-${Math.random().toString(36).substr(2, 9)}`;
-        const { svg } = await mermaid.render(id, definition);
+        const { svg } = await mermaid.render(id, code);
         setSvg(svg);
         setError(null);
       } catch (e) {
@@ -31,20 +43,104 @@ export const MermaidEmbed: React.FC<MermaidEmbedProps> = ({ definition }) => {
       }
     };
 
-    renderDiagram();
-  }, [definition]);
+    const timeout = setTimeout(renderDiagram, 300);
+    return () => clearTimeout(timeout);
+  }, [code]);
+
+  // Save on blur
+  const handleBlur = useCallback(() => {
+    if (onChange && code !== definition) {
+      onChange(code);
+    }
+    isFocusedRef.current = false;
+  }, [code, definition, onChange]);
+
+  // Handle Ctrl+S
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+      e.preventDefault();
+      if (onChange) {
+        onChange(code);
+      }
+      setTimeout(() => {
+        window.dispatchEvent(new Event('app-save'));
+      }, 100);
+    }
+  };
 
   return (
-    <div className="w-full h-full overflow-auto bg-white p-4 flex items-center justify-center">
-      {error ? (
-        <div className="text-red-500">{error}</div>
-      ) : (
-        <div 
-          ref={containerRef}
-          dangerouslySetInnerHTML={{ __html: svg }} 
-          className="w-full h-full flex items-center justify-center"
-        />
-      )}
+    <div className="w-full h-full flex flex-col bg-white dark:bg-gray-900" onKeyDown={handleKeyDown}>
+      {/* Toolbar */}
+      <div className="flex items-center gap-1 p-2 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800">
+        <button
+          className={clsx(
+            "p-1.5 rounded text-sm flex items-center gap-1",
+            viewMode === 'code' ? "bg-blue-500 text-white" : "hover:bg-gray-200 dark:hover:bg-gray-700"
+          )}
+          onClick={() => setViewMode('code')}
+          title="Code Only"
+        >
+          <Code size={14} />
+        </button>
+        <button
+          className={clsx(
+            "p-1.5 rounded text-sm flex items-center gap-1",
+            viewMode === 'split' ? "bg-blue-500 text-white" : "hover:bg-gray-200 dark:hover:bg-gray-700"
+          )}
+          onClick={() => setViewMode('split')}
+          title="Split View"
+        >
+          <Columns size={14} />
+        </button>
+        <button
+          className={clsx(
+            "p-1.5 rounded text-sm flex items-center gap-1",
+            viewMode === 'preview' ? "bg-blue-500 text-white" : "hover:bg-gray-200 dark:hover:bg-gray-700"
+          )}
+          onClick={() => setViewMode('preview')}
+          title="Preview Only"
+        >
+          <Eye size={14} />
+        </button>
+        <span className="ml-2 text-xs text-gray-500">Mermaid Diagram</span>
+        {error && <span className="ml-auto text-xs text-red-500">{error}</span>}
+      </div>
+
+      {/* Content */}
+      <div className="flex-1 flex overflow-hidden">
+        {/* Code Editor */}
+        {(viewMode === 'code' || viewMode === 'split') && (
+          <div className={clsx("flex flex-col", viewMode === 'split' ? "w-1/2 border-r border-gray-200 dark:border-gray-700" : "w-full")}>
+            <textarea
+              ref={textareaRef}
+              className="flex-1 w-full p-4 font-mono text-sm bg-gray-50 dark:bg-gray-950 text-gray-900 dark:text-gray-100 resize-none outline-none"
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
+              onBlur={handleBlur}
+              onFocus={() => { isFocusedRef.current = true; }}
+              placeholder="Enter Mermaid diagram code..."
+              spellCheck={false}
+            />
+          </div>
+        )}
+
+        {/* Preview */}
+        {(viewMode === 'preview' || viewMode === 'split') && (
+          <div className={clsx("overflow-auto p-4 flex items-center justify-center bg-white dark:bg-gray-900", viewMode === 'split' ? "w-1/2" : "w-full")}>
+            {error ? (
+              <div className="text-red-500 text-sm">{error}</div>
+            ) : svg ? (
+              <div 
+                ref={containerRef}
+                dangerouslySetInnerHTML={{ __html: svg }} 
+                className="max-w-full max-h-full"
+              />
+            ) : (
+              <div className="text-gray-400 text-sm">Enter Mermaid code to see preview</div>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 };
