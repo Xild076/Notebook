@@ -1,7 +1,10 @@
 import React, { useState } from 'react';
-import { ChevronRight, ChevronDown, File, FilePlus, FolderPlus } from 'lucide-react';
+import { ChevronRight, ChevronDown, File, FilePlus, FolderPlus, ImagePlus } from 'lucide-react';
 import { FileEntry, useAppStore } from '../store/store';
 import { createFile, createFolder, loadFileStructure } from '../lib/fileSystem';
+import { InputModal } from './ui/InputModal';
+import { open } from '@tauri-apps/plugin-dialog';
+import { copyFile } from '@tauri-apps/plugin-fs';
 import clsx from 'clsx';
 
 interface FileNodeProps {
@@ -53,57 +56,86 @@ const FileNode: React.FC<FileNodeProps> = ({ entry, depth = 0 }) => {
 
 export const FileExplorer: React.FC = () => {
   const { fileStructure, currentPath, setFileStructure } = useAppStore();
+  const [isNewFileModalOpen, setIsNewFileModalOpen] = useState(false);
+  const [isNewFolderModalOpen, setIsNewFolderModalOpen] = useState(false);
 
-  const handleCreateFile = async () => {
-    if (!currentPath) return;
-    const name = prompt("Enter file name (e.g., note.md):");
-    if (name) {
-      try {
-        const fullPath = `${currentPath}\\${name}`;
-        await createFile(fullPath);
-        const files = await loadFileStructure(currentPath);
-        setFileStructure(files);
-      } catch (e) {
-        console.error("Failed to create file", e);
-        alert("Failed to create file");
-      }
+  const handleCreateFile = async (name: string) => {
+    if (!currentPath || !name) return;
+    try {
+      const fullPath = `${currentPath}\\${name}`;
+      await createFile(fullPath);
+      const files = await loadFileStructure(currentPath);
+      setFileStructure(files);
+    } catch (e) {
+      console.error("Failed to create file", e);
+      alert("Failed to create file");
     }
   };
 
-  const handleCreateFolder = async () => {
+  const handleCreateFolder = async (name: string) => {
+    if (!currentPath || !name) return;
+    try {
+      const fullPath = `${currentPath}\\${name}`;
+      await createFolder(fullPath);
+      const files = await loadFileStructure(currentPath);
+      setFileStructure(files);
+    } catch (e) {
+      console.error("Failed to create folder", e);
+      alert("Failed to create folder");
+    }
+  };
+
+  const handleImportImage = async () => {
     if (!currentPath) return;
-    const name = prompt("Enter folder name:");
-    if (name) {
-      try {
-        const fullPath = `${currentPath}\\${name}`;
-        await createFolder(fullPath);
-        const files = await loadFileStructure(currentPath);
-        setFileStructure(files);
-      } catch (e) {
-        console.error("Failed to create folder", e);
-        alert("Failed to create folder");
+    try {
+      const selected = await open({
+        multiple: false,
+        filters: [{
+          name: 'Images',
+          extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg']
+        }]
+      });
+
+      if (selected && typeof selected === 'string') {
+        const fileName = selected.split('\\').pop();
+        if (fileName) {
+          const destPath = `${currentPath}\\${fileName}`;
+          await copyFile(selected, destPath);
+          const files = await loadFileStructure(currentPath);
+          setFileStructure(files);
+        }
       }
+    } catch (e) {
+      console.error("Failed to import image", e);
+      alert("Failed to import image");
     }
   };
 
   return (
-    <div className="w-64 bg-gray-50 dark:bg-gray-950 border-r border-gray-200 dark:border-gray-800 flex flex-col">
+    <div className="w-full h-full bg-gray-50 dark:bg-gray-950 border-r border-gray-200 dark:border-gray-800 flex flex-col">
       <div className="p-2 border-b border-gray-200 dark:border-gray-800 flex justify-between items-center">
         <span className="font-semibold text-sm uppercase text-gray-500">Explorer</span>
         <div className="flex space-x-1">
           <button 
             className="p-1 hover:bg-gray-200 dark:hover:bg-gray-800 rounded" 
             title="New File"
-            onClick={handleCreateFile}
+            onClick={() => setIsNewFileModalOpen(true)}
           >
             <FilePlus size={16} />
           </button>
           <button 
             className="p-1 hover:bg-gray-200 dark:hover:bg-gray-800 rounded" 
             title="New Folder"
-            onClick={handleCreateFolder}
+            onClick={() => setIsNewFolderModalOpen(true)}
           >
             <FolderPlus size={16} />
+          </button>
+          <button 
+            className="p-1 hover:bg-gray-200 dark:hover:bg-gray-800 rounded" 
+            title="Import Image"
+            onClick={handleImportImage}
+          >
+            <ImagePlus size={16} />
           </button>
         </div>
       </div>
@@ -118,6 +150,24 @@ export const FileExplorer: React.FC = () => {
           </div>
         )}
       </div>
+
+      <InputModal
+        isOpen={isNewFileModalOpen}
+        onClose={() => setIsNewFileModalOpen(false)}
+        onSubmit={handleCreateFile}
+        title="Create New File"
+        label="File Name"
+        placeholder="e.g., note.md"
+      />
+
+      <InputModal
+        isOpen={isNewFolderModalOpen}
+        onClose={() => setIsNewFolderModalOpen(false)}
+        onSubmit={handleCreateFolder}
+        title="Create New Folder"
+        label="Folder Name"
+        placeholder="e.g., images"
+      />
     </div>
   );
 };

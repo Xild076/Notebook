@@ -1,0 +1,215 @@
+/* ========================================
+   App Layout - Using absolute positioning
+   to avoid flexbox conflicts with FlexLayout
+   ======================================== */
+
+.app-container {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  overflow: hidden;
+  font-size: 0.875rem;
+  background-color: var(--background);
+  color: var(--foreground);
+}
+
+.app-sidebar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  overflow: hidden;
+  background-color: #f3f4f6;
+}
+
+.dark .app-sidebar,
+.obsidian .app-sidebar {
+  background-color: #1e1e1e;
+}
+
+.app-explorer {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  overflow: hidden;
+  background-color: #f9fafb;
+}
+
+.dark .app-explorer,
+.obsidian .app-explorer {
+  background-color: #252526;
+}
+
+.app-main {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  overflow: hidden;
+  background-color: #ffffff;
+}
+
+.dark .app-main,
+.obsidian .app-main {
+  background-color: #1e1e1e;
+}
+
+/* Resize Handles */
+.resize-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: 0;
+  width: 4px;
+  cursor: col-resize;
+  z-index: 100;
+  transition: background-color 0.15s;
+}
+
+.resize-handle:hover {
+  background-color: #3b82f6;
+}
+
+.resize-handle-explorer {
+  background-color: #e5e7eb;
+}
+
+.dark .resize-handle-explorer,
+.obsidian .resize-handle-explorer {
+  background-color: #374151;
+}
+
+/* ========================================
+   FlexLayout Overrides
+   ======================================== */
+
+/* FlexLayout Dark Mode Overrides */
+.flexlayout__layout {
+  --color-text: #333;
+  --color-background: #fff;
+  --color-base: #ddd;
+  --color-1: #f5f5f5;
+  --color-2: #e8e8e8;
+  --color-3: #dcdcdc;
+  --color-drag1: rgba(255, 255, 255, 0.5);
+  --color-drag2: rgba(0, 0, 0, 0.1);
+  --font-size: 12px;
+  --font-family: 'Segoe UI', sans-serif;
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+}
+
+/* 
+ * FlexLayout drag overlay - use absolute positioning relative to the layout container
+ * Do NOT use position: fixed as it will misalign with the content area
+ */
+.flexlayout__outline_rect,
+.flexlayout__edge_rect {
+  z-index: 99999 !important;
+  pointer-events: none !important;
+}
+
+/* The drag rect (floating tab preview) should follow the mouse */
+.flexlayout__drag_rect {
+  z-index: 99999 !important;
+  pointer-events: none !important;
+}
+
+.obsidian .flexlayout__layout,
+.dark .flexlayout__layout {
+  --color-text: #eee;
+  --color-background: #1e1e1e;
+  --color-base: #252526;
+  --color-1: #2d2d2d;
+  --color-2: #333333;
+  --color-3: #3c3c3c;
+  --color-drag1: rgba(0, 0, 0, 0.5);
+  --color-drag2: rgba(255, 255, 255, 0.1);
+}
+
+/* Tab Set Header */
+.flexlayout__tabset_header {
+  background-color: var(--color-base);
+  border-bottom: 1px solid var(--color-3);
+}
+
+.flexlayout__tab_button {
+  background-color: var(--color-1);
+  color: var(--color-text);
+  border: 1px solid var(--color-3);
+  border-bottom: none;
+  margin-right: 2px;
+  border-top-left-radius: 4px;
+  border-top-right-radius: 4px;
+  user-select: none; /* Prevent text selection during drag */
+  cursor: grab;
+}
+
+.flexlayout__tab_button:active {
+  cursor: grabbing;
+}
+
+.flexlayout__tab_button--selected {
+  background-color: var(--color-background);
+  color: #4a9eff; /* Blue highlight */
+}
+
+.flexlayout__tab_button:hover {
+  background-color: var(--color-2);
+}
+
+/* Content Area */
+.flexlayout__tabset_content {
+  background-color: var(--color-background);
+  min-width: 0;
+  min-height: 0;
+}
+
+.flexlayout__tabset_header,
+.flexlayout__tabset,
+.flexlayout__tabset_header_content,
+.flexlayout__tabset_tabbar_inner {
+  min-width: 0;
+  min-height: 0;
+  pointer-events: auto;
+}
+
+/* Splitters */
+.flexlayout__splitter {
+  background-color: var(--color-base);
+  z-index: 10; /* Ensure splitter is above content */
+}
+
+.flexlayout__splitter:hover {
+  background-color: #007acc;
+}
+
+/* Drag Rect - duplicated rule, use the one at top instead */
+
+/* Editor Container Fix */
+.flexlayout__tab {
+  background-color: var(--color-background);
+  color: var(--color-text);
+}
+
+/* Ensure Editor takes full height and has correct background */
+.flexlayout__tab > div {
+  height: 100%;
+  width: 100%;
+  background-color: var(--color-background);
+}
+
+/* Dark Mode Specifics for FlexLayout classes if needed */
+.flexlayout__tab_toolbar_button--dark {
+  fill: #eee;
+}
+
+.flexlayout__tab_toolbar_button:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+

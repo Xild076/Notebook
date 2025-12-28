@@ -5,13 +5,13 @@ import "./index.css";
 
 // Polyfill process for libraries that expect it
 if (typeof window !== 'undefined') {
-  if (!window.process) {
+  if (!(window as any).process) {
     // @ts-ignore
-    window.process = { env: { NODE_ENV: import.meta.env.MODE } };
+    (window as any).process = { env: { NODE_ENV: import.meta.env.MODE } };
   }
-  if (!window.global) {
+  if (!(window as any).global) {
     // @ts-ignore
-    window.global = window;
+    (window as any).global = window;
   }
 }
 

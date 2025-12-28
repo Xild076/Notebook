@@ -1,4 +1,4 @@
-import { readDir, readTextFile, writeTextFile, mkdir } from '@tauri-apps/plugin-fs';
+import { readDir, readTextFile, writeTextFile, mkdir, readFile, writeFile } from '@tauri-apps/plugin-fs';
 import { open } from '@tauri-apps/plugin-dialog';
 import { FileEntry } from '../store/store';
 
@@ -34,6 +34,14 @@ export const loadFileStructure = async (path: string): Promise<FileEntry[]> => {
 };
 
 export const readFileContent = async (path: string): Promise<string> => {
+  if (path.toLowerCase().endsWith('.pdf')) {
+    const bytes = await readFile(path);
+    // Convert Uint8Array to Base64 string efficiently
+    const binary = Array.from(bytes)
+      .map((b) => String.fromCharCode(b))
+      .join('');
+    return btoa(binary);
+  }
   return await readTextFile(path);
 };
 
@@ -47,4 +55,8 @@ export const createFolder = async (path: string): Promise<void> => {
 
 export const createFile = async (path: string, content: string = ''): Promise<void> => {
   await writeTextFile(path, content);
+};
+
+export const saveImage = async (path: string, data: Uint8Array): Promise<void> => {
+  await writeFile(path, data);
 };
