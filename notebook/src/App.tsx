@@ -1,4 +1,5 @@
-import { useEffect, useCallback, useState } from 'react';
+import { useEffect, useCallback, useState, useRef } from 'react';
+import { VaultManager } from './components/VaultManager';
 import { Sidebar } from './components/Sidebar';
 import { FileExplorer } from './components/FileExplorer';
 import { Editor } from './components/editor/Editor';
@@ -8,10 +9,16 @@ import { MonacoEmbed } from './components/embeds/MonacoEmbed';
 import { KanbanEmbed } from './components/embeds/KanbanEmbed';
 import { SpreadsheetEmbed } from './components/embeds/SpreadsheetEmbed';
 import { PDFEmbed } from './components/embeds/PDFEmbed';
+import { CSVEmbed } from './components/embeds/CSVEmbed';
+import { HTMLEmbed } from './components/embeds/HTMLEmbed';
 import { GraphView } from './components/GraphView';
 import { SearchModal } from './components/SearchModal';
+import { QuickSwitcher } from './components/QuickSwitcher';
+import { CopilotPanel } from './components/CopilotPanel';
+import { VersionHistoryModal } from './components/VersionHistoryModal';
 import { useAppStore } from './store/store';
 import { loadFileStructure, readFileContent, saveFileContent } from './lib/fileSystem';
+import { saveVersion } from './lib/versionHistory';
 import { Layout, Model, TabNode, IJsonModel, Actions, DockLocation } from 'flexlayout-react';
 import 'flexlayout-react/style/light.css';
 import clsx from 'clsx';
@@ -63,7 +70,13 @@ const FileTabContent = ({ path }: { path: string }) => {
   if (path.toLowerCase().endsWith('.pdf')) {
     return <PDFEmbed dataString={content} />;
   }
-  if (path.match(/\.(js|ts|tsx|py|json|css|html)$/)) {
+  if (path.toLowerCase().endsWith('.csv')) {
+    return <CSVEmbed dataString={content} onChange={handleEditorChange} />;
+  }
+  if (path.toLowerCase().endsWith('.html') || path.toLowerCase().endsWith('.htm')) {
+    return <HTMLEmbed dataString={content} onChange={handleEditorChange} />;
+  }
+  if (path.match(/\.(js|ts|tsx|py|json|css|xml|yaml|yml)$/)) {
     return <MonacoEmbed code={content} language={path.split('.').pop()} onChange={handleEditorChange} />;
   }
 
@@ -116,13 +129,45 @@ function App() {
     setActiveFile, 
     unsavedChanges,
     fileContents,
-    setUnsaved
+    setUnsaved,
+    setCurrentPath,
+    setFileContent,
+    autosaveEnabled,
+    autosaveInterval,
+    versionHistoryEnabled,
+    maxVersionsPerFile
   } = useAppStore();
+
+  // Vault state
+  const [showVaultManager, setShowVaultManager] = useState(() => !window.localStorage.getItem('lastVaultPath'));
+  const [versionHistoryFile, setVersionHistoryFile] = useState<string | null>(null);
+  const autosaveTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Open vault handler
+  interface Vault {
+    path: string;
+  }
+
+  const handleOpenVault = (vault: Vault): void => {
+    setCurrentPath(vault.path);
+    window.localStorage.setItem('lastVaultPath', vault.path);
+    setShowVaultManager(false);
+  };
 
   const [model, setModel] = useState<Model>(Model.fromJson(defaultLayout));
   const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [isQuickSwitcherOpen, setIsQuickSwitcherOpen] = useState(false);
 
-  // Load file structure
+
+  // Show vault manager if no vault is open
+  useEffect(() => {
+    if (!currentPath) {
+      const last = window.localStorage.getItem('lastVaultPath');
+      if (!last) setShowVaultManager(true);
+    }
+  }, [currentPath]);
+
+  // Load file structure when vault is set
   useEffect(() => {
     if (currentPath) {
       loadFileStructure(currentPath).then(setFileStructure).catch(console.error);
@@ -130,19 +175,46 @@ function App() {
   }, [currentPath, setFileStructure]);
 
   // Handle Global Save
-  const handleSave = useCallback(async () => {
+  const handleSave = useCallback(async (isAutosave = false) => {
     for (const path of unsavedChanges) {
       if (fileContents[path] !== undefined) {
         try {
           await saveFileContent(path, fileContents[path]);
           setUnsaved(path, false);
-          console.log('Saved', path);
+          
+          // Save version history (only if enabled and not too frequent for autosave)
+          if (versionHistoryEnabled && currentPath) {
+            await saveVersion(currentPath, path, fileContents[path], maxVersionsPerFile);
+          }
+          
+          console.log(isAutosave ? 'Autosaved' : 'Saved', path);
         } catch (e) {
           console.error('Failed to save', path, e);
         }
       }
     }
-  }, [unsavedChanges, fileContents, setUnsaved]);
+  }, [unsavedChanges, fileContents, setUnsaved, versionHistoryEnabled, currentPath, maxVersionsPerFile]);
+
+  // Autosave effect
+  useEffect(() => {
+    if (autosaveEnabled && unsavedChanges.size > 0) {
+      // Clear existing timer
+      if (autosaveTimerRef.current) {
+        clearTimeout(autosaveTimerRef.current);
+      }
+      
+      // Set new timer
+      autosaveTimerRef.current = setTimeout(() => {
+        handleSave(true);
+      }, autosaveInterval * 1000);
+    }
+    
+    return () => {
+      if (autosaveTimerRef.current) {
+        clearTimeout(autosaveTimerRef.current);
+      }
+    };
+  }, [autosaveEnabled, autosaveInterval, unsavedChanges, handleSave]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -150,12 +222,50 @@ function App() {
         e.preventDefault();
         handleSave();
       }
+      if ((e.ctrlKey || e.metaKey) && e.key === 'o') {
+        e.preventDefault();
+        setIsQuickSwitcherOpen(true);
+      }
     };
     window.addEventListener('keydown', handleKeyDown);
-    window.addEventListener('app-save', handleSave);
+    window.addEventListener('app-save', () => handleSave());
+    
+    // Listen for menu actions from Electron menu
+    window.electronAPI.onMenuAction((action: string) => {
+      switch (action) {
+        case 'save':
+          handleSave();
+          break;
+        case 'quick-switcher':
+          setIsQuickSwitcherOpen(true);
+          break;
+        case 'graph':
+          window.dispatchEvent(new CustomEvent('app-open-graph'));
+          break;
+        case 'search':
+          setIsSearchOpen(true);
+          break;
+        case 'open-folder':
+          window.dispatchEvent(new CustomEvent('app-open-folder'));
+          break;
+        case 'version-history':
+          if (activeFile) {
+            setVersionHistoryFile(activeFile);
+          }
+          break;
+      }
+    });
+    
+    // Listen for format actions from Electron menu
+    window.electronAPI.onFormatAction((action: string) => {
+      window.dispatchEvent(new CustomEvent('editor-format', { detail: { action } }));
+    });
+    
+    const saveHandler = () => handleSave();
+    
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
-      window.removeEventListener('app-save', handleSave);
+      window.removeEventListener('app-save', saveHandler);
     };
   }, [handleSave]);
 
@@ -199,11 +309,76 @@ function App() {
 
     const toggleSearch = () => setIsSearchOpen(true);
 
+    const openToRight = (e: CustomEvent<{ path: string }>) => {
+      const filePath = e.detail.path;
+      const fileName = filePath.split('\\').pop() || filePath;
+      
+      // Find the active tabset and add to the right
+      const activeTabset = model.getActiveTabset();
+      if (activeTabset) {
+        model.doAction(Actions.addNode({
+          type: 'tab',
+          component: 'file',
+          name: fileName,
+          id: filePath,
+          enableDrag: true,
+          enableRename: false,
+        }, activeTabset.getId(), DockLocation.RIGHT, -1));
+      }
+    };
+
     window.addEventListener('app-open-graph', openGraph);
     window.addEventListener('app-toggle-search', toggleSearch);
+    window.addEventListener('app-open-to-right', openToRight as EventListener);
+    
+    const openCopilot = () => {
+      const activeTabset = model.getActiveTabset();
+      const fallbackParent = model.getRoot().getChildren()[0]?.getId();
+      const parentId = activeTabset ? activeTabset.getId() : fallbackParent;
+
+      if (!parentId) return;
+
+      try {
+        const existing = model.getNodeById('copilot-panel');
+        if (existing) {
+          model.doAction(Actions.selectTab('copilot-panel'));
+        } else {
+          model.doAction(Actions.addNode({
+            type: 'tab',
+            component: 'copilot',
+            name: 'AI Copilot',
+            id: 'copilot-panel',
+            enableClose: true,
+            enableDrag: true,
+            enableRename: false,
+          }, parentId, DockLocation.RIGHT, -1));
+        }
+      } catch (e) {
+        if (parentId) {
+          model.doAction(Actions.addNode({
+              type: 'tab',
+              component: 'copilot',
+              name: 'AI Copilot',
+              id: 'copilot-panel',
+              enableDrag: true,
+              enableRename: false,
+          }, parentId, DockLocation.RIGHT, -1));
+        }
+      }
+    };
+    window.addEventListener('app-open-copilot', openCopilot);
+    
+    const openVersionHistory = (e: CustomEvent<{ path: string }>) => {
+      setVersionHistoryFile(e.detail.path);
+    };
+    window.addEventListener('app-open-version-history', openVersionHistory as EventListener);
+    
     return () => {
       window.removeEventListener('app-open-graph', openGraph);
       window.removeEventListener('app-toggle-search', toggleSearch);
+      window.removeEventListener('app-open-to-right', openToRight as EventListener);
+      window.removeEventListener('app-open-copilot', openCopilot);
+      window.removeEventListener('app-open-version-history', openVersionHistory as EventListener);
     };
   }, [model]);
 
@@ -250,6 +425,9 @@ function App() {
     if (component === 'graph') {
       return <GraphView onNodeClick={(path) => setActiveFile(path)} />;
     }
+    if (component === 'copilot') {
+      return <CopilotPanel />;
+    }
     if (component === 'file') {
       const path = node.getConfig()?.path || node.getId();
       return <FileTabContent path={path} />;
@@ -292,6 +470,10 @@ function App() {
   // Calculate positions for absolute layout
   const explorerLeft = sidebarWidth;
   const mainLeft = sidebarWidth + explorerWidth;
+
+  if (showVaultManager) {
+    return <VaultManager onOpenVault={handleOpenVault} />;
+  }
 
   return (
     <div className={clsx("app-container", theme)}>
@@ -343,6 +525,24 @@ function App() {
         onClose={() => setIsSearchOpen(false)} 
         onOpenFile={(path) => setActiveFile(path)} 
       />
+
+      <QuickSwitcher
+        isOpen={isQuickSwitcherOpen}
+        onClose={() => setIsQuickSwitcherOpen(false)}
+        onOpenFile={(path) => setActiveFile(path)}
+      />
+
+      {versionHistoryFile && (
+        <VersionHistoryModal
+          isOpen={!!versionHistoryFile}
+          onClose={() => setVersionHistoryFile(null)}
+          filePath={versionHistoryFile}
+          onRestore={(content) => {
+            setFileContent(versionHistoryFile, content);
+            setUnsaved(versionHistoryFile, true);
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -21,4 +21,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
   exists: (filePath: string) => ipcRenderer.invoke('fs:exists', filePath),
   copyFile: (src: string, dest: string) => ipcRenderer.invoke('fs:copyFile', src, dest),
   moveFile: (src: string, dest: string) => ipcRenderer.invoke('fs:moveFile', src, dest),
+  deleteFile: (filePath: string) => ipcRenderer.invoke('fs:deleteFile', filePath),
+  showInExplorer: (filePath: string) => ipcRenderer.invoke('fs:showInExplorer', filePath),
+
+  // Menu action listeners
+  onMenuAction: (callback: (action: string) => void) => {
+    ipcRenderer.on('menu-action', (_, action) => callback(action));
+  },
+  onFormatAction: (callback: (action: string) => void) => {
+    ipcRenderer.on('format-action', (_, action) => callback(action));
+  },
 });
