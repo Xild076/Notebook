@@ -37,11 +37,32 @@ const initialData: KanbanData = {
   columnOrder: ['column-1', 'column-2', 'column-3'],
 };
 
+// Validate and fix kanban data structure
+const validateKanbanData = (data: any): KanbanData => {
+  const result: KanbanData = {
+    tasks: data?.tasks && typeof data.tasks === 'object' ? data.tasks : {},
+    columns: data?.columns && typeof data.columns === 'object' ? data.columns : initialData.columns,
+    columnOrder: Array.isArray(data?.columnOrder) ? data.columnOrder : initialData.columnOrder,
+  };
+  
+  // Filter columnOrder to only include existing columns
+  result.columnOrder = result.columnOrder.filter(id => result.columns[id]);
+  
+  // If no valid columns, use defaults
+  if (result.columnOrder.length === 0) {
+    result.columns = initialData.columns;
+    result.columnOrder = initialData.columnOrder;
+  }
+  
+  return result;
+};
+
 export const KanbanEmbed: React.FC<KanbanEmbedProps> = ({ dataString, onChange }) => {
   const [data, setData] = useState<KanbanData>(() => {
     if (dataString && dataString.trim() !== '') {
       try {
-        return JSON.parse(dataString);
+        const parsed = JSON.parse(dataString);
+        return validateKanbanData(parsed);
       } catch (e) {
         console.error("Failed to parse Kanban data", e);
         return initialData;
@@ -228,7 +249,8 @@ export const KanbanEmbed: React.FC<KanbanEmbedProps> = ({ dataString, onChange }
         <div className="flex gap-4 h-full items-start">
           {data.columnOrder.map((columnId, columnIndex) => {
             const column = data.columns[columnId];
-            const tasks = column.taskIds.map((taskId) => data.tasks[taskId]);
+            if (!column) return null; // Skip invalid columns
+            const tasks = (column.taskIds || []).map((taskId) => data.tasks[taskId]).filter(Boolean);
 
             return (
               <div key={column.id} className="w-72 bg-gray-200 dark:bg-gray-800 rounded-lg p-2 flex flex-col max-h-full shrink-0">

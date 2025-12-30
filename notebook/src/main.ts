@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog, Menu, MenuItemConstructorOptions } from 'electron';
 import path from 'node:path';
 import fs from 'node:fs/promises';
 import started from 'electron-squirrel-startup';
@@ -8,9 +8,11 @@ if (started) {
   app.quit();
 }
 
+let mainWindow: BrowserWindow | null = null;
+
 const createWindow = () => {
   // Create the browser window.
-  const mainWindow = new BrowserWindow({
+  mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
     webPreferences: {
@@ -19,6 +21,109 @@ const createWindow = () => {
       nodeIntegration: false,
     },
   });
+
+  // Create the application menu
+  const menuTemplate: MenuItemConstructorOptions[] = [
+    {
+      label: 'File',
+      submenu: [
+        { label: 'New File', accelerator: 'CmdOrCtrl+N', click: () => mainWindow?.webContents.send('menu-action', 'new-file') },
+        { label: 'Open Folder...', accelerator: 'CmdOrCtrl+Shift+O', click: () => mainWindow?.webContents.send('menu-action', 'open-folder') },
+        { label: 'Save', accelerator: 'CmdOrCtrl+S', click: () => mainWindow?.webContents.send('menu-action', 'save') },
+        { type: 'separator' },
+        { label: 'Quick Switcher', accelerator: 'CmdOrCtrl+O', click: () => mainWindow?.webContents.send('menu-action', 'quick-switcher') },
+        { type: 'separator' },
+        { role: 'quit' }
+      ]
+    },
+    {
+      label: 'Edit',
+      submenu: [
+        { role: 'undo' },
+        { role: 'redo' },
+        { type: 'separator' },
+        { role: 'cut' },
+        { role: 'copy' },
+        { role: 'paste' },
+        { role: 'selectAll' }
+      ]
+    },
+    {
+      label: 'Format',
+      submenu: [
+        { label: 'Bold', accelerator: 'CmdOrCtrl+B', click: () => mainWindow?.webContents.send('format-action', 'bold') },
+        { label: 'Italic', accelerator: 'CmdOrCtrl+I', click: () => mainWindow?.webContents.send('format-action', 'italic') },
+        { label: 'Strikethrough', accelerator: 'CmdOrCtrl+Shift+S', click: () => mainWindow?.webContents.send('format-action', 'strikethrough') },
+        { type: 'separator' },
+        { label: 'Link to File', accelerator: 'CmdOrCtrl+L', click: () => mainWindow?.webContents.send('format-action', 'link-file') },
+        { label: 'Embed File', accelerator: 'CmdOrCtrl+Shift+E', click: () => mainWindow?.webContents.send('format-action', 'embed-file') },
+        { label: 'Link to Website', accelerator: 'CmdOrCtrl+K', click: () => mainWindow?.webContents.send('format-action', 'link-external') },
+        { type: 'separator' },
+        {
+          label: 'Heading',
+          submenu: [
+            { label: 'Heading 1', accelerator: 'CmdOrCtrl+1', click: () => mainWindow?.webContents.send('format-action', 'h1') },
+            { label: 'Heading 2', accelerator: 'CmdOrCtrl+2', click: () => mainWindow?.webContents.send('format-action', 'h2') },
+            { label: 'Heading 3', accelerator: 'CmdOrCtrl+3', click: () => mainWindow?.webContents.send('format-action', 'h3') },
+            { label: 'Heading 4', accelerator: 'CmdOrCtrl+4', click: () => mainWindow?.webContents.send('format-action', 'h4') },
+            { label: 'Heading 5', accelerator: 'CmdOrCtrl+5', click: () => mainWindow?.webContents.send('format-action', 'h5') },
+            { label: 'Heading 6', accelerator: 'CmdOrCtrl+6', click: () => mainWindow?.webContents.send('format-action', 'h6') },
+          ]
+        },
+        { type: 'separator' },
+        { label: 'Blockquote', accelerator: 'CmdOrCtrl+Shift+.', click: () => mainWindow?.webContents.send('format-action', 'blockquote') },
+        { label: 'Code Block', accelerator: 'CmdOrCtrl+Shift+C', click: () => mainWindow?.webContents.send('format-action', 'code-block') },
+        { label: 'Inline Code', accelerator: 'CmdOrCtrl+`', click: () => mainWindow?.webContents.send('format-action', 'inline-code') },
+        { type: 'separator' },
+        { label: 'Table', click: () => mainWindow?.webContents.send('format-action', 'table') },
+        { label: 'Horizontal Rule', click: () => mainWindow?.webContents.send('format-action', 'hr') },
+        { type: 'separator' },
+        { label: 'Footnote', click: () => mainWindow?.webContents.send('format-action', 'footnote') },
+        { label: 'Subscript', click: () => mainWindow?.webContents.send('format-action', 'subscript') },
+        { label: 'Superscript', click: () => mainWindow?.webContents.send('format-action', 'superscript') },
+      ]
+    },
+    {
+      label: 'View',
+      submenu: [
+        { label: 'Graph View', accelerator: 'CmdOrCtrl+G', click: () => mainWindow?.webContents.send('menu-action', 'graph') },
+        { label: 'Search', accelerator: 'CmdOrCtrl+Shift+F', click: () => mainWindow?.webContents.send('menu-action', 'search') },
+        { label: 'Version History', accelerator: 'CmdOrCtrl+Shift+H', click: () => mainWindow?.webContents.send('menu-action', 'version-history') },
+        { type: 'separator' },
+        { role: 'reload' },
+        { role: 'forceReload' },
+        { role: 'toggleDevTools' },
+        { type: 'separator' },
+        { role: 'resetZoom' },
+        { role: 'zoomIn' },
+        { role: 'zoomOut' },
+        { type: 'separator' },
+        { role: 'togglefullscreen' }
+      ]
+    },
+    {
+      label: 'Window',
+      submenu: [
+        { role: 'minimize' },
+        { role: 'close' }
+      ]
+    },
+    {
+      label: 'Help',
+      submenu: [
+        {
+          label: 'Learn More',
+          click: async () => {
+            const { shell } = await import('electron');
+            await shell.openExternal('https://github.com');
+          }
+        }
+      ]
+    }
+  ];
+
+  const menu = Menu.buildFromTemplate(menuTemplate);
+  Menu.setApplicationMenu(menu);
 
   // and load the index.html of the app.
   if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
@@ -115,6 +220,17 @@ ipcMain.handle('fs:copyFile', async (_, src: string, dest: string) => {
 // Move/rename file
 ipcMain.handle('fs:moveFile', async (_, src: string, dest: string) => {
   await fs.rename(src, dest);
+});
+
+// Delete file or directory
+ipcMain.handle('fs:deleteFile', async (_, filePath: string) => {
+  await fs.rm(filePath, { recursive: true, force: true });
+});
+
+// Show file in system explorer
+ipcMain.handle('fs:showInExplorer', async (_, filePath: string) => {
+  const { shell } = await import('electron');
+  shell.showItemInFolder(filePath);
 });
 
 // This method will be called when Electron has finished

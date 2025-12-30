@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import 'react-data-grid/lib/styles.css';
 import { DataGrid, SelectColumn } from 'react-data-grid';
+import type { RenderEditCellProps } from 'react-data-grid';
 import { Plus, Minus, RowsIcon, Columns, Trash2 } from 'lucide-react';
 
 interface SpreadsheetEmbedProps {
@@ -9,8 +10,29 @@ interface SpreadsheetEmbedProps {
 }
 
 interface Row {
-  [key: string]: string;
+  _id: number;
+  [key: string]: string | number;
 }
+
+// Custom text editor for cells
+function TextEditor({ row, column, onRowChange, onClose }: RenderEditCellProps<Row>) {
+  return (
+    <input
+      className="w-full h-full px-2 border-2 border-blue-500 outline-none bg-white dark:bg-gray-800"
+      autoFocus
+      value={row[column.key] as string}
+      onChange={(e) => onRowChange({ ...row, [column.key]: e.target.value })}
+      onBlur={() => onClose(true)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') onClose(true);
+        if (e.key === 'Escape') onClose(false);
+      }}
+    />
+  );
+}
+
+let rowIdCounter = 0;
+const getNextRowId = () => ++rowIdCounter;
 
 const createColumns = (count: number) => {
   const cols = [];
@@ -22,16 +44,17 @@ const createColumns = (count: number) => {
       name: letter,
       editable: true,
       resizable: true,
-      width: 100
+      width: 100,
+      renderEditCell: TextEditor
     });
   }
   return cols;
 };
 
-const createEmptyRows = (rowCount: number, colCount: number) => {
-  const rows = [];
+const createEmptyRows = (rowCount: number, colCount: number): Row[] => {
+  const rows: Row[] = [];
   for (let i = 0; i < rowCount; i++) {
-    const row: Row = {};
+    const row: Row = { _id: getNextRowId() };
     for (let j = 0; j < colCount; j++) {
       row[j.toString()] = '';
     }
@@ -46,11 +69,18 @@ export const SpreadsheetEmbed: React.FC<SpreadsheetEmbedProps> = ({ dataString, 
     if (dataString && dataString.trim() !== '') {
       try {
         const parsed = JSON.parse(dataString);
+        let loadedRows: Row[] = [];
         if (parsed.rows && parsed.colCount) {
-          return parsed.rows;
+          loadedRows = parsed.rows;
+        } else if (Array.isArray(parsed)) {
+          // Legacy format - just rows
+          loadedRows = parsed;
         }
-        // Legacy format - just rows
-        return parsed;
+        // Ensure all rows have _id
+        return loadedRows.map((row: Row) => ({
+          ...row,
+          _id: row._id ?? getNextRowId()
+        }));
       } catch (e) {
         console.error("Failed to parse Spreadsheet data", e);
         return createEmptyRows(50, 26);
@@ -97,7 +127,7 @@ export const SpreadsheetEmbed: React.FC<SpreadsheetEmbedProps> = ({ dataString, 
   };
 
   const addRow = () => {
-    const newRow: Row = {};
+    const newRow: Row = { _id: getNextRowId() };
     for (let j = 0; j < colCount; j++) {
       newRow[j.toString()] = '';
     }
@@ -201,7 +231,7 @@ export const SpreadsheetEmbed: React.FC<SpreadsheetEmbedProps> = ({ dataString, 
           onRowsChange={onRowsChange}
           selectedRows={selectedRows}
           onSelectedRowsChange={setSelectedRows}
-          rowKeyGetter={(row, index) => index}
+          rowKeyGetter={(row) => row._id}
           className="rdg-light dark:rdg-dark h-full"
           style={{ height: '100%' }}
         />

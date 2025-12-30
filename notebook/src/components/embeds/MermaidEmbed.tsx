@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import mermaid from 'mermaid';
-import { Code, Eye, Columns } from 'lucide-react';
+import { Code, Eye, Columns, ZoomIn, ZoomOut, RotateCcw } from 'lucide-react';
 import clsx from 'clsx';
 
 interface MermaidEmbedProps {
@@ -23,6 +23,7 @@ export const MermaidEmbed: React.FC<MermaidEmbedProps> = ({ definition, onChange
   const [error, setError] = useState<string | null>(null);
   const [code, setCode] = useState(definition || '');
   const [viewMode, setViewMode] = useState<ViewMode>('split');
+  const [zoom, setZoom] = useState(100);
   const isFocusedRef = useRef(false);
 
   // Render diagram when code changes
@@ -102,6 +103,34 @@ export const MermaidEmbed: React.FC<MermaidEmbedProps> = ({ definition, onChange
         >
           <Eye size={14} />
         </button>
+        
+        <div className="w-px h-4 bg-gray-300 dark:bg-gray-600 mx-1" />
+        
+        <button
+          className="p-1.5 rounded hover:bg-gray-200 dark:hover:bg-gray-700"
+          onClick={() => setZoom(z => Math.max(25, z - 25))}
+          title="Zoom Out"
+        >
+          <ZoomOut size={14} />
+        </button>
+        <span className="text-xs text-gray-600 dark:text-gray-400 min-w-[3rem] text-center">
+          {zoom}%
+        </span>
+        <button
+          className="p-1.5 rounded hover:bg-gray-200 dark:hover:bg-gray-700"
+          onClick={() => setZoom(z => Math.min(400, z + 25))}
+          title="Zoom In"
+        >
+          <ZoomIn size={14} />
+        </button>
+        <button
+          className="p-1.5 rounded hover:bg-gray-200 dark:hover:bg-gray-700"
+          onClick={() => setZoom(100)}
+          title="Reset Zoom"
+        >
+          <RotateCcw size={14} />
+        </button>
+        
         <span className="ml-2 text-xs text-gray-500">Mermaid Diagram</span>
         {error && <span className="ml-auto text-xs text-red-500">{error}</span>}
       </div>
@@ -133,7 +162,8 @@ export const MermaidEmbed: React.FC<MermaidEmbedProps> = ({ definition, onChange
               <div 
                 ref={containerRef}
                 dangerouslySetInnerHTML={{ __html: svg }} 
-                className="max-w-full max-h-full"
+                className="max-w-full max-h-full transition-transform"
+                style={{ transform: `scale(${zoom / 100})`, transformOrigin: 'center center' }}
               />
             ) : (
               <div className="text-gray-400 text-sm">Enter Mermaid code to see preview</div>

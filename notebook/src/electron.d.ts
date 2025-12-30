@@ -25,6 +25,12 @@ interface ElectronAPI {
   exists: (filePath: string) => Promise<boolean>;
   copyFile: (src: string, dest: string) => Promise<void>;
   moveFile: (src: string, dest: string) => Promise<void>;
+  deleteFile: (filePath: string) => Promise<void>;
+  showInExplorer: (filePath: string) => Promise<void>;
+  
+  // Menu action listeners
+  onMenuAction: (callback: (action: string) => void) => void;
+  onFormatAction: (callback: (action: string) => void) => void;
 }
 
 declare global {
